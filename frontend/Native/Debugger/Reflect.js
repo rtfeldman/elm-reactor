@@ -53,15 +53,13 @@ Elm.Native.Debugger.Reflect.make = function(localRuntime) {
 		} else if (type === 'string') {
 			return {ctor: 'Str', _0: v};
 		} else if (type === 'object' && '_' in v && probablyPublic(v)) {
-			var _args = [];
+			var args = [];
 			for (var k in v._) {
+				// not sure what is in here
 				for (var i = v._[k].length; i--; ) {
-					_args.push(k + ' = ' + toString(v._[k][i], separator));
-					// output.push(Utils.Tuple2(k, ))
-					// TODO
+					args.push(Utils.Tuple2(k, decode(v._[k][i])));
 				}
 			}
-			var args = [];
 			for (var k in v) {
 				if (k === '_') continue;
 				args.push(Utils.Tuple2(k, decode(v[k])));
@@ -94,7 +92,7 @@ Elm.Native.Debugger.Reflect.make = function(localRuntime) {
 				if (list.ctor === '::' && list._0._1.ctor === '_Tuple0') {
 					return {
 						ctor: 'SetV',
-						_0: Set.fromList(A2(List.map, function(x){return x._0}, list))
+						_0: A2(List.map, function(x){return decode(x._0)}, list)
 					};
 				}
 				function decodeBoth(pair)
@@ -111,7 +109,11 @@ Elm.Native.Debugger.Reflect.make = function(localRuntime) {
 					if (i === 'ctor') continue;
 					args.push(decode(v[i]));
 				}
-				return {ctor: 'Constructor', _0: NativeList.fromArray(args)};
+				return {
+					ctor: 'Constructor',
+					_0: v.ctor,
+					_1: NativeList.fromArray(args)
+				};
 			}
 		}
 		if (type === 'object' && 'notify' in v) {
