@@ -1,12 +1,62 @@
 module Debugger.Reflect where
 
-import Debugger.RuntimeApi as API
 import Html
+import Json.Encode as JsEnc
+import Dict exposing (Dict)
+import Set exposing (Set)
+import Array exposing (Array)
 
 import Native.Debugger.Reflect
 
-getHtml : API.JsElmValue -> Html.Html
+
+type ElmValue
+  -- literals
+  = Number Int -- ???
+  | Chr Char
+  | Str String
+  | Boolean Bool
+  -- special types
+  | ListV (List ElmValue)
+  | DictV (List (ElmValue, ElmValue))
+  | SetV (Set ElmValue)
+  | ArrayV (Array ElmValue)
+  | TupleV (List ElmValue)
+  -- other
+  | Constructor String (List ElmValue)
+  -- wut is really going on here
+  | Record (List (String, ElmValue))
+  | Function String
+  -- when we give up
+  | NativeVal JsEnc.Value
+  | SignalV
+
+
+type RecordVals
+  = RecordVals
+      { superVals : RecordVals
+      , vals : List (String, ElmValue)
+      }
+
+
+type alias JsElmValue =
+  JsEnc.Value
+
+
+getHtml : JsElmValue -> Html.Html
 getHtml =
   Native.Debugger.Reflect.getHtml
 
--- TODO: repr of Elm values in Elm
+
+reflect : a -> ElmValue
+reflect =
+  jsRepr >> decode
+
+
+jsRepr : a -> JsElmValue
+jsRepr =
+  Native.Debugger.Reflect.jsRepr
+
+
+decode : JsElmValue -> ElmValue
+decode =
+  Native.Debugger.Reflect.decode

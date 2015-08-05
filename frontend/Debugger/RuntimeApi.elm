@@ -2,22 +2,17 @@ module Debugger.RuntimeApi where
 
 import Task exposing (Task)
 import Dict
-import Json.Encode as JsEnc
 import Time
 import Empty exposing (Empty)
 
 import DataUtils exposing (..)
 
+import Debugger.Reflect as Reflect
 import Native.Debugger.RuntimeApi
 
 
 type alias FrameIndex =
   Int
-
-
-type alias JsElmValue =
-  JsEnc.Value
-
 
 type DebugSession
   = DebugSession -- opaque
@@ -33,7 +28,7 @@ type StateError
 
 
 type alias Event =
-  { value : JsElmValue
+  { value : Reflect.JsElmValue
   , nodeId : NodeId
   , time : Time.Time
   }
@@ -81,7 +76,7 @@ numFrames =
 -- new frame
 type alias NewFrameNotification =
     { event : Event
-    , flaggedExprValues : List (ExprTag, JsElmValue)
+    , flaggedExprValues : List (ExprTag, Reflect.JsElmValue)
     , subscribedNodeValues : ValueSet
     }
 
@@ -141,11 +136,11 @@ type alias FrameInterval =
 
 
 type alias ValueLog =
-  List (FrameIndex, JsElmValue)
+  List (FrameIndex, Reflect.JsElmValue)
 
 
 type alias ValueSet =
-  List (NodeId, JsElmValue)
+  List (NodeId, Reflect.JsElmValue)
 
 
 -- COMMANDS
@@ -304,10 +299,3 @@ setPlaying =
 setSubscribedToNode : DebugSession -> NodeId -> Bool -> Task () ()
 setSubscribedToNode =
   Native.Debugger.RuntimeApi.setSubscribedToNode
-
-
--- Util
-
-prettyPrint : JsElmValue -> String
-prettyPrint val =
-  Native.Debugger.RuntimeApi.prettyPrint val "  "
