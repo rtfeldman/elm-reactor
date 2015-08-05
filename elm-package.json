@@ -4,7 +4,8 @@
     "repository": "https://github.com/elm-lang/elm-reactor.git",
     "license": "BSD3",
     "source-directories": [
-        "frontend"
+        "frontend",
+        "elm-components/src"
     ],
     "exposed-modules": [],
     "native-modules": true,

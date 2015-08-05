@@ -7,6 +7,13 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Debug
 
+import Transaction exposing (..)
+
+type alias Model a =
+  { expansionModel : ExpansionModel
+  , tree : Tree a
+  }
+
 
 type Tree a
   = Node a (List (Tree a))
@@ -31,40 +38,97 @@ type Message
 (=>) = (,)
 
 
-view : (Signal.Address Message) -> RenderFun a -> Tree a -> ExpansionModel -> Html
-view addr render tree expModel =
-  case (tree, expModel) of
+update : Message -> Model a -> Transaction Message (Model a)
+update msg state =
+  case msg of
+    ChangeExpansion expanded ->
+      case (state.tree, state.expansionModel) of
+        (Node _ _, ExpNode _ expChildren) ->
+          done { state | expansionModel <- ExpNode expanded expChildren }
+
+        (Leaf _, ExpLeaf) ->
+          Debug.crash "trying to change expansion of a leaf"
+
+        _ ->
+          Debug.crash "mismatched expansion model and tree"
+
+    ChildMessage idx msg ->
+      case (state.tree, state.expansionModel) of
+        (Node _ children, ExpNode expanded expChildren) ->
+          let
+            subUpdate childIdx (subTree, subExpModel) =
+              if childIdx == idx then
+                with
+                  (tag
+                    (ChildMessage idx)
+                    (update msg { tree = subTree, expansionModel = subExpModel }))
+                  done
+              else
+                done { tree = subTree, expansionModel = subExpModel }
+          in
+            with
+              (Transaction.list
+                (List.indexedMap
+                  subUpdate <|
+                    List.map2 (,) children expChildren))
+              (\newChildModels ->
+                done
+                  { state | expansionModel <-
+                      ExpNode expanded (List.map .expansionModel newChildModels)
+                  }
+              )
+
+        (Leaf _, ExpLeaf) ->
+          Debug.crash "child message on a leaf"
+
+        _ ->
+          Debug.crash "mismatched expansion model and tree"
+
+
+view : Signal.Address Message -> RenderFun a -> Model a -> Html
+view addr render state =
+  case (state.tree, state.expansionModel) of
     (Leaf item, ExpLeaf) ->
       render item False
 
     (Node item children, ExpNode expanded expChildren) ->
-      div []
-        [ span
-            [ onClick addr (ChangeExpansion (not expanded))
-            , style
-                ["cursor" => "default"]
-            ]
-            [ text <| if expanded then "▼" else "▶" ]
-        , span [] [ render item expanded ]
-        , ul
-            [ style
-                [ "list-style" => "none"
-                , "margin-top" => "0"
+      let
+        heading =
+          [ span
+              [ onClick addr (ChangeExpansion (not expanded))
+              , style
+                  ["cursor" => "default"]
+              ]
+              [ text <| if expanded then "▼" else "▶" ]
+          , span [] [ render item expanded ]
+          ]
+
+        childrenViews =
+          if expanded then
+            [ ul
+                [ style
+                    [ "list-style" => "none"
+                    , "margin-top" => "0"
+                    ]
                 ]
+                (List.map2 (,) children expChildren
+                  |> List.indexedMap (\idx (child, expChild) ->
+                    li
+                      []
+                      [ view
+                          (Signal.forwardTo addr (ChildMessage idx))
+                          render
+                          { tree = child
+                          , expansionModel = expChild
+                          }
+                      ]
+                  )
+                )
             ]
-            (List.map2 (,) children expChildren
-              |> List.indexedMap (\idx (child, expChild) ->
-                li
-                  []
-                  [ view
-                      (Signal.forwardTo addr (ChildMessage idx))
-                      render
-                      child
-                      expChild
-                  ]
-              )
-            )
-        ]
+          else
+            []
+      in
+        div [] (heading ++ childrenViews)
 
     _ ->
       Debug.crash "mismatched tree and expansion model"
@@ -97,8 +161,3 @@ allCollapsed tree =
 emptyExpansionModel : ExpansionModel
 emptyExpansionModel =
   ExpLeaf
-
-
-updateExpansion : Tree a -> Bool -> ExpansionModel -> ExpansionModel
-updateExpansion newTree default expModel =
-  expModel

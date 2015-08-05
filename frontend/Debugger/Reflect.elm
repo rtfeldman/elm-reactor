@@ -30,13 +30,6 @@ type ElmValue
   | SignalV
 
 
-type RecordVals
-  = RecordVals
-      { superVals : RecordVals
-      , vals : List (String, ElmValue)
-      }
-
-
 type alias JsElmValue =
   JsEnc.Value
 
