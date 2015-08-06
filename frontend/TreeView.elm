@@ -94,42 +94,56 @@ view addr render state =
     (Node item children, ExpNode expanded expChildren) ->
       let
         heading =
-          [ span
-              [ onClick addr (ChangeExpansion (not expanded))
-              , style
-                  ["cursor" => "default"]
-              ]
-              [ text <| if expanded then "▼" else "▶" ]
-          , span [] [ render item expanded ]
-          ]
+          div
+            [ style
+                [ "display" => "flex" 
+                , "align-items" => "center"
+                ]
+            ]
+            [ div
+                [ onClick addr (ChangeExpansion (not expanded))
+                , style
+                    [ "cursor" => "default" 
+                    , "font-size" => "13px"
+                    , "width" => "13px"
+                    , "height" => "13px"
+                    , "padding-right" => "5px"
+                    , "-webkit-user-select" => "none"
+                    ]
+                ]
+                [ text <| if expanded then "▼" else "▶" ]
+            , div [] [ render item expanded ]
+            ]
 
         childrenViews =
           if expanded then
-            [ ul
-                [ style
-                    [ "list-style" => "none"
-                    , "margin-top" => "0"
-                    , "padding-left" => "20px"
+            [ div []
+                [ ul
+                    [ style
+                        [ "list-style" => "none"
+                        , "margin-top" => "0"
+                        , "padding-left" => "20px"
+                        ]
                     ]
+                    (List.map2 (,) children expChildren
+                      |> List.indexedMap (\idx (child, expChild) ->
+                        li
+                          []
+                          [ view
+                              (Signal.forwardTo addr (ChildMessage idx))
+                              render
+                              { tree = child
+                              , expansionModel = expChild
+                              }
+                          ]
+                      )
+                    )
                 ]
-                (List.map2 (,) children expChildren
-                  |> List.indexedMap (\idx (child, expChild) ->
-                    li
-                      []
-                      [ view
-                          (Signal.forwardTo addr (ChildMessage idx))
-                          render
-                          { tree = child
-                          , expansionModel = expChild
-                          }
-                      ]
-                  )
-                )
-            ]
+              ]
           else
             []
       in
-        div [] (heading ++ childrenViews)
+        div [] ([heading] ++ childrenViews)
 
     _ ->
       Debug.crash "mismatched tree and expansion model"
