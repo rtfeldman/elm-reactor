@@ -31,6 +31,8 @@ initModel =
         , b = Set.fromList [1,2,3]
         , d = Array.fromList [1,2,3]
         , e = Just "sup"
+        , f = (1,2,5)
+        , g = (Just (Just 4), Just Nothing)
         }
         |> Reflect.reflect
         |> Debug.log "val"
@@ -203,7 +205,7 @@ render valueView expanded =
     ContainerHeading val ->
       case val of
         Reflect.ListV items ->
-          text "List"
+          text "[…]"
 
         Reflect.DictV items ->
           text "Dict"
@@ -212,13 +214,24 @@ render valueView expanded =
           text "Set"
 
         Reflect.ArrayV items ->
-          text "Array"
+          text "Array […]"
 
         Reflect.TupleV items ->
-          text "Tuple"
+          text <| "(" ++ String.join ", " (List.repeat (List.length items) "…") ++ ")"
 
         Reflect.Record items ->
-          text "record"
+          span []
+            ( [ text "{" ]
+              ++ List.intersperse
+                  (text ", ")
+                  (items |> List.map (\(name, val) ->
+                    span []
+                      [ colorText "purple" (name ++ "=")
+                      , text "…"
+                      ]
+                  ))
+              ++ [ text "}" ]
+            )
 
         Reflect.Constructor ctor items ->
           text ctor
