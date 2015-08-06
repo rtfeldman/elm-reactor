@@ -109,6 +109,7 @@ view addr render state =
                 [ style
                     [ "list-style" => "none"
                     , "margin-top" => "0"
+                    , "padding-left" => "20px"
                     ]
                 ]
                 (List.map2 (,) children expChildren

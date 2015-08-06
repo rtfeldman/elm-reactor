@@ -207,16 +207,26 @@ render valueView expanded =
         ContainerHeading val ->
           case val of
             Reflect.ListV items ->
-              text "[…]"
+              case items of
+                [] ->
+                  text "[]"
+
+                _ ->
+                  text <| "[…" ++ toString (List.length items) ++ "…]"
 
             Reflect.DictV items ->
-              text "Dict"
+              text <| "Dict " ++ toString (List.length items)
 
             Reflect.SetV items ->
-              text "Set"
+              text <| "Set " ++ toString (List.length items)
 
             Reflect.ArrayV items ->
-              text "Array […]"
+              case items of
+                [] ->
+                  text "Array []"
+
+                _ ->
+                  text <| "Array […" ++ toString (List.length items) ++ "…]"                  
 
             Reflect.TupleV items ->
               text <| "(" ++ String.join ", " (List.repeat (List.length items) "…") ++ ")"
