@@ -109,6 +109,7 @@ view addr render state =
                     , "height" => "13px"
                     , "padding-right" => "5px"
                     , "-webkit-user-select" => "none"
+                    , "color" => "grey"
                     ]
                 ]
                 [ text <| if expanded then "▼" else "▶" ]
