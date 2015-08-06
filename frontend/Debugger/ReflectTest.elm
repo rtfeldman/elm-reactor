@@ -201,86 +201,90 @@ colorText color str =
 
 render : TreeView.RenderFun ValueView
 render valueView expanded =
-  case valueView of
-    ContainerHeading val ->
-      case val of
-        Reflect.ListV items ->
-          text "[…]"
+  let
+    core =
+      case valueView of
+        ContainerHeading val ->
+          case val of
+            Reflect.ListV items ->
+              text "[…]"
 
-        Reflect.DictV items ->
-          text "Dict"
+            Reflect.DictV items ->
+              text "Dict"
 
-        Reflect.SetV items ->
-          text "Set"
+            Reflect.SetV items ->
+              text "Set"
 
-        Reflect.ArrayV items ->
-          text "Array […]"
+            Reflect.ArrayV items ->
+              text "Array […]"
 
-        Reflect.TupleV items ->
-          text <| "(" ++ String.join ", " (List.repeat (List.length items) "…") ++ ")"
+            Reflect.TupleV items ->
+              text <| "(" ++ String.join ", " (List.repeat (List.length items) "…") ++ ")"
 
-        Reflect.Record items ->
+            Reflect.Record items ->
+              span []
+                ( [ text "{" ]
+                  ++ List.intersperse
+                      (text ", ")
+                      (items |> List.map (\(name, val) ->
+                        span []
+                          [ colorText "purple" (name ++ "=")
+                          , text "…"
+                          ]
+                      ))
+                  ++ [ text "}" ]
+                )
+
+            Reflect.Constructor ctor items ->
+              text ctor
+
+            _ ->
+              Debug.crash <| "not a container: " ++ (toString val)
+
+        OrderedItem idx view ->
           span []
-            ( [ text "{" ]
-              ++ List.intersperse
-                  (text ", ")
-                  (items |> List.map (\(name, val) ->
-                    span []
-                      [ colorText "purple" (name ++ "=")
-                      , text "…"
-                      ]
-                  ))
-              ++ [ text "}" ]
-            )
+            [ colorText "purple" <| toString idx ++ ": "
+            , render view expanded
+            ]
 
-        Reflect.Constructor ctor items ->
-          text ctor
+        RecordItem name view ->
+          span []
+            [ colorText "purple" name
+            , colorText "darkgrey" " = "
+            , render view expanded
+            ]
 
-        _ ->
-          Debug.crash <| "not a container: " ++ (toString val)
+        DictItemHeading keyVal valVal ->
+          text "…"
 
-    OrderedItem idx view ->
-      span []
-        [ colorText "purple" <| toString idx ++ ": "
-        , render view expanded
-        ]
+        DictKey view ->
+          span []
+            [ colorText "purple" "key: "
+            , render view expanded
+            ]
 
-    RecordItem name view ->
-      span []
-        [ colorText "purple" name
-        , colorText "darkgrey" " = "
-        , render view expanded
-        ]
+        DictValue view ->
+          span []
+            [ colorText "purple" "val: "
+            , render view expanded
+            ]
 
-    DictItemHeading keyVal valVal ->
-      text "…"
+        AtomValue val ->
+          case val of
+            Reflect.Number int ->
+              colorText "blue" <| toString int
 
-    DictKey view ->
-      span []
-        [ colorText "purple" "key: "
-        , render view expanded
-        ]
+            Reflect.Chr chr ->
+              colorText "green" <| "'" ++ String.fromChar chr ++ "'"
 
-    DictValue view ->
-      span []
-        [ colorText "purple" "val: "
-        , render view expanded
-        ]
+            Reflect.Str str ->
+              -- TODO add slashes
+              colorText "green" <| "\"" ++ str ++ "\""
 
-    AtomValue val ->
-      case val of
-        Reflect.Number int ->
-          colorText "blue" <| toString int
+            Reflect.Boolean bool ->
+              colorText "blue" <| if bool then "True" else "False"
 
-        Reflect.Chr chr ->
-          colorText "green" <| "'" ++ String.fromChar chr ++ "'"
-
-        Reflect.Str str ->
-          -- TODO add slashes
-          colorText "green" <| "\"" ++ str ++ "\""
-
-        Reflect.Boolean bool ->
-          colorText "blue" <| if bool then "True" else "False"
-
-        _ ->
-          Debug.crash <| "not an atom: " ++ toString val
+            _ ->
+              Debug.crash <| "not an atom: " ++ toString val
+  in
+    span [ style ["font-family" => "monospace"] ] [ core ]
