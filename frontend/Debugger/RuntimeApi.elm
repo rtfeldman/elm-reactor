@@ -57,6 +57,21 @@ justMain shape =
   [shape.mainId]
 
 
+mainAndFoldps : SGShape -> List NodeId
+mainAndFoldps shape =
+  let
+    isFoldp node =
+      node.name == "foldp"
+
+    foldps =
+      shape.nodes
+        |> Dict.toList
+        |> List.filter (snd >> isFoldp)
+        |> List.map fst
+  in
+    [shape.mainId] ++ foldps
+
+
 getModule : DebugSession -> ElmModule
 getModule =
   Native.Debugger.RuntimeApi.getModule
@@ -226,7 +241,9 @@ regenerate snapshots. Failure means the event history wasn't empty
 (this is intended to be used right after initialization)
 
 Currently returns flagged expr history but not node history. -}
-setInputHistory : DebugSession -> InputHistory -> Task () (List (ExprTag, ValueLog))
+setInputHistory : DebugSession
+               -> InputHistory
+               -> Task () (List (ExprTag, ValueLog), List (NodeId, ValueLog))
 setInputHistory =
   Native.Debugger.RuntimeApi.setInputHistory
 
@@ -257,7 +274,7 @@ validate inputHistory oldShape newShape =
 swap : DebugSession
     -> ElmModule
     -> (SGShape -> List NodeId)
-    -> Task ReplayError (DebugSession, List (ExprTag, ValueLog))
+    -> Task ReplayError (DebugSession, List (ExprTag, ValueLog), List (NodeId, ValueLog))
 swap session newMod initialNodesFun =
   (dispose session)
   `Task.andThen` (\_ ->
@@ -278,7 +295,8 @@ swap session newMod initialNodesFun =
             Nothing ->
               setInputHistory newSession history
                 |> Task.mapError (\_ -> Debug.crash "session's event list wasn't empty")
-                |> Task.map (\logs -> (newSession, logs))
+                |> Task.map (\(exprLogs, nodeLogs) ->
+                      (newSession, exprLogs, nodeLogs))
       )
     )
   )
@@ -299,7 +317,7 @@ forkFrom session frameIdx =
         (initializeFullscreenAndSubscribe
           (getModule session)
           (getAddress session)
-          (always subs))
+          mainAndFoldps)
         `Task.andThen` (\(newSession, _) ->
           (setInputHistory
             newSession

@@ -405,6 +405,11 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 					session.events = history.events;
 
 					var flaggedExprLogs = {};
+					var nodeLogs = {};
+					session.subscribedNodeIds.forEach(function(nodeId) {
+						var value = session.sgNodes[nodeId].value;
+						nodeLogs[nodeId] = [Utils.Tuple2(0, value)];
+					});
 
 					// replay events, regenerating snapshots and capturing
 					// flagged expr logs along the way
@@ -414,14 +419,18 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 
 						session.flaggedExprValues = [];
 						session.originalNotify(event.nodeId, event.value);
+						var frameIdx = i + 1;
 						session.flaggedExprValues.forEach(function(tagAndVal) {
 							var tag = tagAndVal._0;
 							var value = tagAndVal._1;
 							if (!(tag in flaggedExprLogs)) {
 								flaggedExprLogs[tag] = [];
 							}
-							var frameIdx = i + 1;
 							flaggedExprLogs[tag].push(Utils.Tuple2(frameIdx, value));
+						});
+						session.subscribedNodeIds.forEach(function(nodeId) {
+							var value = session.sgNodes[nodeId].value;
+							nodeLogs[nodeId].push(Utils.Tuple2(frameIdx, value));
 						});
 
 						if(i != 0 && i % EVENTS_PER_SAVE == 0)
@@ -429,13 +438,24 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 							session.snapshots.push(takeSnapshot(session.sgNodes));
 						}
 					}
-					var logs = [];
-					for (exprTag in flaggedExprLogs)
+					var flaggedExprLogsArray = [];
+					for (var exprTag in flaggedExprLogs)
 					{
 						var log = List.fromArray(flaggedExprLogs[exprTag]);
-						logs.push(Utils.Tuple2(exprTag, log));
+						flaggedExprLogsArray.push(Utils.Tuple2(exprTag, log));
 					}
-					callback(Task.succeed(List.fromArray(logs)));
+					var flaggedExprLogsList = List.fromArray(flaggedExprLogsArray);
+
+					var nodeLogsArray = [];
+					for (var nodeId of session.subscribedNodeIds)
+					{
+						var log = List.fromArray(nodeLogs[nodeId]);
+						nodeLogsArray.push(Utils.Tuple2(nodeId, log));
+					}
+					var nodeLogsList = List.fromArray(nodeLogsArray);
+
+					var result = Utils.Tuple2(flaggedExprLogsList, nodeLogsList);
+					callback(Task.succeed(result));
 				}
 			});
 		});

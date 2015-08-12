@@ -79,11 +79,13 @@ type Response
       API.DebugSession
       API.JsElmValue
       (List (API.ExprTag, API.ValueLog))
+      (List (API.NodeId, API.ValueLog))
   | StartWithHistoryResponse
       API.DebugSession
       API.JsElmValue
       Int
       (List (API.ExprTag, API.ValueLog))
+      (List (API.NodeId, API.ValueLog))
 
 
 update : Message -> Model -> Transaction Message Model
@@ -162,7 +164,7 @@ update msg state =
             swapTask =
               (API.instantiateModule compiledMod)
               `Task.andThen` (\newMod ->
-                (API.swap state.session newMod API.justMain
+                (API.swap state.session newMod API.mainAndFoldps
                   |> Task.toResult)
                 `Task.andThen` (\swapRes ->
                   case swapRes of
@@ -172,7 +174,7 @@ update msg state =
                         (SwapReplayError replayError)
                       |> Task.map (always NoOp)
 
-                    Ok (newSession, logs) ->
+                    Ok (newSession, exprLogs, nodeLogs) ->
                       API.getNodeStateSingle
                         newSession
                         (curFrameIdx state)
@@ -183,7 +185,8 @@ update msg state =
                               SwapResponse
                                 newSession
                                 (getMainVal newSession values)
-                                logs)
+                                exprLogs
+                                nodeLogs)
                 )
               )
           in
@@ -224,7 +227,7 @@ update msg state =
                       newSession
                       history
                     |> Task.mapError (\_ -> Debug.crash "event list wasn't empty"))
-                    `Task.andThen` (\logs ->
+                    `Task.andThen` (\(exprLogs, nodeLogs) ->
                       (API.getNumFrames newSession)
                       `Task.andThen` (\numFrames ->
                         API.getNodeStateSingle
@@ -238,7 +241,8 @@ update msg state =
                                   newSession
                                   (getMainVal newSession valueSet)
                                   numFrames
-                                  logs)
+                                  exprLogs
+                                  nodeLogs)
                       )
                     )
                   )
@@ -250,10 +254,6 @@ update msg state =
       case not of
         NewFrame newFrameNot ->
           let
-            newMainVal =
-              newFrameNot.subscribedNodeValues
-                |> getMainVal state.session
-
             currentFrameIndex =
               state.numFrames
 
@@ -303,23 +303,25 @@ update msg state =
                 , nodeLogs <- truncateLogs frameIdx state.nodeLogs
             }
 
-        SwapResponse newSession mainVal logs ->
+        SwapResponse newSession mainVal exprLogs nodeLogs ->
           requestTask
             (API.setMain state.session mainVal
               |> Task.map (always NoOp))
             { state
                 | session <- newSession
-                , exprLogs <- Dict.fromList logs
+                , exprLogs <- Dict.fromList exprLogs
+                , nodeLogs <- Dict.fromList nodeLogs
             }
 
-        StartWithHistoryResponse newSession mainVal numFrames logs ->
+        StartWithHistoryResponse newSession mainVal numFrames exprLogs nodeLogs ->
           requestTask
             (API.setMain state.session mainVal
               |> Task.map (always NoOp))
             { state
                 | session <- newSession
                 , numFrames <- numFrames
-                , exprLogs <- Dict.fromList logs
+                , exprLogs <- Dict.fromList exprLogs
+                , nodeLogs <- Dict.fromList nodeLogs
             }
 
     NoOp ->
