@@ -3,6 +3,7 @@ module Debugger where
 import Html exposing (..)
 import Html.Attributes as Attr exposing (..)
 import Html.Events exposing (..)
+import Html.Lazy exposing (lazy)
 import Signal
 import Task exposing (Task)
 import Json.Decode as JsDec
@@ -10,7 +11,6 @@ import Json.Encode as JsEnc
 import Color
 import Maybe
 import Result
-import Dict
 import Debug
 
 import Effects exposing (..)
@@ -30,8 +30,6 @@ import SideBar.Controls as Controls
 import SideBar.Logs as Logs
 import DataUtils exposing (..)
 import SignalGraph
-import Graphics.Collage
-import Diagrams.Core as Diagrams
 
 
 serviceApp : StartApp.App Service.Model
@@ -259,14 +257,7 @@ viewSidebar addr state =
               addr
               state
               activeState
-          , (API.getSgShape activeState.session)
-              |> .nodes
-              |> Dict.map (\nodeId nodeInfo -> (nodeInfo, nodeInfo.kids))
-              |> SignalGraph.viewGraph
-              |> Diagrams.render
-              |> (\x -> [x])
-              |> Graphics.Collage.collage 300 400
-              |> Html.fromElement
+          , lazy SignalGraph.view (API.getSgShape activeState.session)
           , exportImport addr
           ]
 

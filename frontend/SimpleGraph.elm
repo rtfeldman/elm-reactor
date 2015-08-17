@@ -23,7 +23,6 @@ longestPathFrom node graph =
               graph
                 |> Dict.get node
                 |> getMaybe "node not found"
-                |> Debug.log "node"
                 |> snd
                 |> List.foldl
                     (\label (depth, depths) ->

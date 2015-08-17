@@ -6,6 +6,7 @@ import Diagrams.FillStroke exposing (..)
 import Diagrams.Align exposing (..)
 import Diagrams.Query exposing (..)
 import Graphics.Collage
+import Html exposing (Html)
 import Text
 import Color
 import Dict exposing (Dict)
@@ -74,3 +75,15 @@ viewGraph graph =
   in
     zcat [nodes, edges]
       |> alignCenter
+
+
+view : DM.SGShape -> Html
+view sgShape =
+  sgShape
+    |> .nodes
+    |> Dict.map (\nodeId nodeInfo -> (nodeInfo, nodeInfo.kids))
+    |> viewGraph
+    |> render
+    |> (\x -> [x])
+    |> Graphics.Collage.collage 300 400
+    |> Html.fromElement
