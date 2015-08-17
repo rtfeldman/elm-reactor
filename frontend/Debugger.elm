@@ -10,6 +10,7 @@ import Json.Encode as JsEnc
 import Color
 import Maybe
 import Result
+import Dict
 import Debug
 
 import Effects exposing (..)
@@ -28,6 +29,9 @@ import SessionRecord as SessionRecord
 import SideBar.Controls as Controls
 import SideBar.Logs as Logs
 import DataUtils exposing (..)
+import SignalGraph
+import Graphics.Collage
+import Diagrams.Core as Diagrams
 
 
 serviceApp : StartApp.App Service.Model
@@ -255,11 +259,14 @@ viewSidebar addr state =
               addr
               state
               activeState
-          , Logs.view
-              (Signal.forwardTo addr LogsMessage)
-              Controls.totalHeight
-              state.logsState
-              activeState
+          , (API.getSgShape activeState.session)
+              |> .nodes
+              |> Dict.map (\nodeId nodeInfo -> (nodeInfo, nodeInfo.kids))
+              |> SignalGraph.viewGraph
+              |> Diagrams.render
+              |> (\x -> [x])
+              |> Graphics.Collage.collage 300 400
+              |> Html.fromElement
           , exportImport addr
           ]
 
