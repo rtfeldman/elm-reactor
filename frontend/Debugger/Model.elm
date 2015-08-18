@@ -51,6 +51,7 @@ type alias NewFrameNotification =
   { event : Event
   , flaggedExprValues : List (ExprTag, JsElmValue)
   , subscribedNodeValues : ValueSet
+  , updatedNodes : List NodeId
   }
 
 
