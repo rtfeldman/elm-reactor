@@ -8,24 +8,26 @@ import Control.Monad (guard)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Maybe (isJust)
 import qualified Data.ByteString.Char8 as BSC
+import qualified Data.List as List
 import qualified Data.Version as Version
+import qualified Elm.Compiler as Compiler
+import Elm.Utils ((|>))
 import qualified Network.WebSockets.Snap as WSS
-import qualified Text.Blaze.Html5 as H
-import qualified Text.Blaze.Html.Renderer.Utf8 as Blaze
+import Paths_elm_reactor (version)
 import System.Console.CmdArgs
 import System.Directory
 import System.FilePath
 import Snap.Core
 import Snap.Http.Server
 import Snap.Util.FileServe
+import qualified Text.Blaze.Html5 as H
+import qualified Text.Blaze.Html.Renderer.Utf8 as Blaze
 
-import Index
 import qualified Compile
+import qualified Generate.Index as Index
+import qualified Generate.NotFound as NotFound
 import qualified Socket
-import qualified Utils
-import Paths_elm_reactor (version)
-import qualified Elm.Compiler as Compiler
-import Elm.Utils ((|>))
+import qualified StaticFiles
 
 
 data Flags = Flags
@@ -89,10 +91,16 @@ startupMessage =
 
 directoryConfig :: MonadSnap m => DirectoryConfig m
 directoryConfig =
+  let
+    customGenerator directory =
+      do  info <- liftIO (Index.getInfo directory)
+          modifyResponse $ setContentType "text/html; charset=utf-8"
+          writeBS (Index.toHtml info)
+  in
     fancyDirectoryConfig
-    { indexFiles = []
-    , indexGenerator = elmIndexGenerator
-    }
+      { indexFiles = []
+      , indexGenerator = customGenerator
+      }
 
 
 socket :: Snap ()
@@ -110,7 +118,9 @@ error400 =
 
 error404 :: Snap ()
 error404 =
-    modifyResponse $ setResponseStatus 404 "Not Found"
+  do  modifyResponse $ setResponseStatus 404 "Not Found"
+      modifyResponse $ setContentType "text/html; charset=utf-8"
+      writeBS NotFound.html
 
 
 -- SERVE ELM CODE
@@ -138,18 +148,23 @@ serveHtml html =
 serveAssets :: Snap ()
 serveAssets =
   do  file <- BSC.unpack . rqPathInfo <$> getRequest
-      case file `elem` staticAssets of
-        True ->
-          serveFile =<< liftIO (Utils.getDataFile file)
-
-        False ->
+      case List.lookup file staticAssets of
+        Nothing ->
           pass
 
+        Just content ->
+          do  modifyResponse (setContentType "application/javascript")
+              writeBS content
 
-staticAssets :: [FilePath]
+
+staticAssets :: [(FilePath, BSC.ByteString)]
 staticAssets =
-    [ "favicon.ico"
-    , "_reactor/debug.js"
-    , "_reactor/wrench.png"
+    [ "favicon.ico" ==> undefined
+    , StaticFiles.debuggerPath ==> StaticFiles.debugger
+    , StaticFiles.indexPath ==> StaticFiles.index
+    , StaticFiles.notFoundPath ==> StaticFiles.notFound
     ]
 
+
+(==>) :: a -> b -> (a,b)
+(==>) = (,)

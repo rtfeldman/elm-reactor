@@ -18,23 +18,44 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 	var List = Elm.Native.List.make (localRuntime);
 	var Dict = Elm.Dict.make (localRuntime);
 	var JsArray = Elm.Native.JsArray.make (localRuntime);
+	var Show = Elm.Native.Show.make (localRuntime);
 
 	// not exposed
 	function jumpTo(session, frameIdx)
 	{
 		// get to interval start
-		var snapshotBeforeIdx = Math.floor(frameIdx / eventsPerSnapshot);
-		var snapshot = session.snapshots[snapshotBeforeIdx];
-		for(var nodeId in snapshot) {
-			session.sgNodes[nodeId].value = snapshot[nodeId];
+		var currentSnapshotIdx = Math.floor(session.index / eventsPerSnapshot);
+		var targetSnapshotIdx = Math.floor(frameIdx / eventsPerSnapshot);
+		if (currentSnapshotIdx != targetSnapshotIdx || frameIdx < session.index) {
+			// instantiate snapshot
+			var snapshot = session.snapshots[targetSnapshotIdx];
+			for(var nodeId in snapshot) {
+				session.sgNodes[nodeId].value = snapshot[nodeId];
+			}
+			// push events
+			var targetSnapshotFrameIdx = targetSnapshotIdx * eventsPerSnapshot;
+			for(session.index=targetSnapshotFrameIdx;
+				session.index < frameIdx;
+				session.index++)
+			{
+				var event = session.events[session.index];
+				session.originalNotify(event.nodeId, event.value);
+			}
 		}
-		var snapshotBeforeFrameIdx = snapshotBeforeIdx * eventsPerSnapshot;
-		for(session.index=snapshotBeforeFrameIdx; session.index < frameIdx; session.index++)
+		else
 		{
-			var event = session.events[session.index];
-			session.originalNotify(event.nodeId, event.value);
+			// only push events
+			for(;
+				session.index < frameIdx;
+				session.index++)
+			{
+				var event = session.events[session.index];
+				session.originalNotify(event.nodeId, event.value);
+			}
 		}
 	}
+
+	var latestSessionId = 0;
 
 	// not exposed
 	function initializeFullscreen(module, delay, notificationAddress)
@@ -48,23 +69,21 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 					originalNotify: debugeeLocalRuntime.notify,
 					delay: delay,
 					startedAt: Date.now(),
-					// TODO: delay, totalTimeLost, asyncCallbacks
-					asyncCallbacks: [],
 					events: [],
 					notificationAddress: notificationAddress,
 					disposed: false,
 					playing: true,
-					replayingHistory: false,
 					subscribedNodeIds: [],
 					flaggedExprValues: [],
 					setIntervalIds: [],
 					index: 0,
-					record: null
+					record: null,
+					sessionId: latestSessionId++
 				};
 
 				// set up event recording
 				debugeeLocalRuntime.notify = function(id, value) {
-					if (!session.playing || session.replayingHistory)
+					if (!session.playing)
 					{
 						return false;
 					}
@@ -112,26 +131,18 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 						return 0;
 					}
 
-					var callback = {
-						thunk: thunk,
-						id: 0,
-						executed: false
-					};
-
-					callback.id = setTimeout(function() {
-						callback.executed = true;
-						console.log("thunk", session.id);
-						thunk();
+					var id = setTimeout(function() {
+						if (session.playing)
+						{
+							thunk();
+						}
 					}, delay);
-
-					// TODO: this isn't fully hooked up yet
-					session.asyncCallbacks.push(callback);
-					return callback.id;
+					return id;
 				};
 
 				debugeeLocalRuntime.setInterval = function(thunk, interval) {
 					var intervalId = window.setInterval(function() {
-						if(session.playing && !session.replayingHistory)
+						if(session.playing)
 						{
 							thunk();
 						}
@@ -140,7 +151,7 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 				}
 
 				debugeeLocalRuntime.timer.now = function() {
-					if (!session.playing || session.replayingHistory)
+					if (!session.playing)
 					{
 						var t =
 							session.index < session.events.length
@@ -178,15 +189,21 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 		return session;
 	}
 
-	function start(module, address)
+	function start(module, address, subscribedNodesFun)
 	{
 		return Task.asyncFunction(function(callback) {
 			var session = initializeFullscreen(module, 0, address);
-			callback(Task.succeed(session));
+			session.subscribedNodeIds =
+				List.toArray(subscribedNodesFun(session.shape));
+			var values = session.subscribedNodeIds.map(function(nodeId) {
+				return Utils.Tuple2(nodeId, session.sgNodes[nodeId].value);
+			});
+			var result = Utils.Tuple2(session, List.fromArray(values));
+			callback(Task.succeed(result));
 		})
 	}
 
-	function swap(module, address, inputHistory, maybeShape, validator)
+	function swap(module, address, subscribedNodesFun, inputHistory, maybeShape, validator)
 	{
 		return Task.asyncFunction(function(callback) {
 			var session = initializeFullscreen(module, 0, address);
@@ -209,9 +226,11 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 				}
 				callback(Task.fail(error));
 			} else {
-				session.replayingHistory = true;
 
 				session.events = JsArray.toMutableArray(inputHistory);
+				session.subscribedNodeIds =
+					List.toArray(subscribedNodesFun(session.shape));
+				session.playing = false;
 				
 				var flaggedExprLogs = {};
 				var nodeLogs = {};
@@ -264,8 +283,6 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 				}
 				var nodeLogsList = List.fromArray(nodeLogsArray);
 
-				session.replayingHistory = false;
-
 				var result = {
 					ctor: '_Tuple3',
 					_0: session,
@@ -273,12 +290,14 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 					_2: nodeLogsList
 				};
 
+				session.playing = true;
+
 				callback(Task.succeed(result));
 			}
 		});
 	}
 
-	function play(record, address)
+	function play(record, address, subscribedNodesFun)
 	{
 		return Task.asyncFunction(function (callback) {
 			var timePaused = Date.now() - record.pausedAt;
@@ -286,7 +305,16 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 			var session = initializeFullscreen(record.modul, delay, address);
 			session.events = JsArray.toMutableArray(record.inputHistory);
 			session.snapshots = JsArray.toMutableArray(record.snapshots);
-			callback(Task.succeed(session));
+			session.playing = false;
+			jumpTo(session, session.events.length);
+			session.playing = true;
+			session.subscribedNodeIds =
+				List.toArray(subscribedNodesFun(session.shape));
+			var values = session.subscribedNodeIds.map(function(nodeId) {
+				return Utils.Tuple2(nodeId, session.sgNodes[nodeId].value);
+			});
+			var result = Utils.Tuple2(session, List.fromArray(values));
+			callback(Task.succeed(result));
 		});
 	}
 
@@ -320,14 +348,16 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 	function dispose(session)
 	{
 		return Task.asyncFunction(function(callback) {
-			session.disposed = true;
-			session.runningModule.dispose();
-			for (var intervalId of session.setIntervalIds)
-			{
-				window.clearInterval(intervalId);
-			}
-			session.runtime.node.parentNode.removeChild(session.runtime.node);
-			callback(Task.succeed(Utils.Tuple0));
+			assertNotDisposed(session, callback, function() {
+				session.disposed = true;
+				session.runningModule.dispose();
+				for (var intervalId of session.setIntervalIds)
+				{
+					window.clearInterval(intervalId);
+				}
+				session.runtime.node.parentNode.removeChild(session.runtime.node);
+				callback(Task.succeed(Utils.Tuple0));
+			});
 		});
 	}
 
@@ -492,7 +522,7 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 
 	function assertPaused(session, callback, thunk)
 	{
-		assert(!session.disposed, {ctor: "IsPlaying"}, callback, thunk);
+		assert(!session.playing, {ctor: "IsPlaying"}, callback, thunk);
 	}
 
 	function assertIntervalInRange(session, interval, callback, thunk)
@@ -575,140 +605,17 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 		return nodeValues;
 	}
 
-	var prettyPrint = function() {
-
-		var independentRuntime = {};
-		var List;
-		var ElmArray;
-		var Dict;
-
-		var toString = function(v, separator) {
-			if (v == null) {
-				return "<null>";
-			}
-			var type = typeof v;
-			if (type === "function") {
-				var name = v.func ? v.func.name : v.name;
-				return '<function' + (name === '' ? '' : ': ') + name + '>';
-			} else if (type === "boolean") {
-				return v ? "True" : "False";
-			} else if (type === "number") {
-				return v.toFixed(2).replace(/\.0+$/g, '');
-			} else if ((v instanceof String) && v.isChar) {
-				return "'" + addSlashes(v) + "'";
-			} else if (type === "string") {
-				return '"' + addSlashes(v) + '"';
-			} else if (type === "object" && '_' in v && probablyPublic(v)) {
-				var output = [];
-				for (var k in v._) {
-					for (var i = v._[k].length; i--; ) {
-						output.push(k + " = " + toString(v._[k][i], separator));
-					}
-				}
-				for (var k in v) {
-					if (k === '_') continue;
-					output.push(k + " = " + toString(v[k], separator));
-				}
-				if (output.length === 0) return "{}";
-				var body = "\n" + output.join(",\n");
-				return "{" + body.replace(/\n/g,"\n" + separator) + "\n}";
-			} else if (type === "object" && 'ctor' in v) {
-				if (v.ctor.substring(0,6) === "_Tuple") {
-					var output = [];
-					for (var k in v) {
-						if (k === 'ctor') continue;
-						output.push(toString(v[k], separator));
-					}
-					return "(" + output.join(", ") + ")";
-				} else if (v.ctor === "_Array") {
-					if (!ElmArray) {
-						ElmArray = Elm.Array.make(independentRuntime);
-					}
-					var list = ElmArray.toList(v);
-					return "Array.fromList " + toString(list, separator);
-				} else if (v.ctor === "::") {
-					var output = '[\n' + toString(v._0, separator);
-					v = v._1;
-					while (v && v.ctor === "::") {
-						output += ",\n" + toString(v._0, separator);
-						v = v._1;
-					}
-					return output.replace(/\n/g,"\n" + separator) + "\n]";
-				} else if (v.ctor === "[]") {
-					return "[]";
-				} else if (v.ctor === "RBNode" || v.ctor === "RBEmpty") {
-					if (!Dict || !List) {
-						Dict = Elm.Dict.make(independentRuntime);
-						List = Elm.List.make(independentRuntime);
-					}
-					var list = Dict.toList(v);
-					var name = "Dict";
-					if (list.ctor === "::" && list._0._1.ctor === "_Tuple0") {
-						name = "Set";
-						list = A2(List.map, function(x){return x._0}, list);
-					}
-					return name + ".fromList " + toString(list, separator);
-				} else {
-					var output = "";
-					for (var i in v) {
-						if (i === 'ctor') continue;
-						var str = toString(v[i], separator);
-						var parenless = str[0] === '{' ||
-										str[0] === '<' ||
-										str[0] === "[" ||
-										str.indexOf(' ') < 0;
-						output += ' ' + (parenless ? str : "(" + str + ')');
-					}
-					return v.ctor + output;
-				}
-			}
-			if (type === 'object' && 'notify' in v) return '<signal>';
-			return "<internal structure>";
-		};
-
-		function addSlashes(str)
-		{
-			return str.replace(/\\/g, '\\\\')
-					  .replace(/\n/g, '\\n')
-					  .replace(/\t/g, '\\t')
-					  .replace(/\r/g, '\\r')
-					  .replace(/\v/g, '\\v')
-					  .replace(/\0/g, '\\0')
-					  .replace(/\'/g, "\\'")
-					  .replace(/\"/g, '\\"');
-		}
-
-		function probablyPublic(v)
-		{
-			var keys = Object.keys(v);
-			var len = keys.length;
-			if (len === 3
-				&& 'props' in v
-				&& 'element' in v) return false;
-			if (len === 5
-				&& 'horizontal' in v
-				&& 'vertical' in v
-				&& 'x' in v
-				&& 'y' in v) return false;
-			if (len === 7
-				&& 'theta' in v
-				&& 'scale' in v
-				&& 'x' in v
-				&& 'y' in v
-				&& 'alpha' in v
-				&& 'form' in v) return false;
-			return true;
-		}
-
-		return toString;
-	}();
+	function prettyPrint(value)
+	{
+		return Show.toString(value);
+	}
 
 
 	return localRuntime.Native.Debugger.RuntimeApi.values = {
 
-		start: F2(start),
-		swap: F5(swap),
-		play: F2(play),
+		start: F3(start),
+		swap: F6(swap),
+		play: F3(play),
 		pause: pause,
 		dispose: dispose,
 		setSubscribedToNode: F3(setSubscribedToNode),
@@ -726,6 +633,6 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 
 		eventsPerSnapshot: eventsPerSnapshot,
 
-		prettyPrint: F2(prettyPrint)
+		prettyPrint: prettyPrint
 	};
 };

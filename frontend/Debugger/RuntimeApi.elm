@@ -16,13 +16,15 @@ import Native.Debugger.RuntimeApi
 
 start : ElmModule
      -> Signal.Address NewFrameNotification
-     -> Task x DebugSession
+     -> (SGShape -> List NodeId)
+     -> Task x (DebugSession, ValueSet)
 start =
   Native.Debugger.RuntimeApi.start
 
 
 swap : ElmModule
     -> Signal.Address NewFrameNotification
+    -> (SGShape -> List NodeId)
     -> InputHistory
     -> Maybe SGShape
     -> (SGShape -> SGShape -> InputHistory -> Bool)
@@ -43,7 +45,8 @@ the SessionRecord's paused time and the current time.
 Error: SessionRecord's name is different than given module's. -}
 play : ImmediateSessionRecord
     -> Signal.Address NewFrameNotification
-    -> Task x DebugSession
+    -> (SGShape -> List NodeId)
+    -> Task x (DebugSession, ValueSet)
 play =
   Native.Debugger.RuntimeApi.play
 
@@ -180,8 +183,9 @@ splitRecord idx record =
           | inputHistory <- beforeHistory
           , snapshots <- beforeSnaps
           , pausedAt <-
-              JsArray.get -1 afterHistory
+              JsArray.get -1 beforeHistory
                 |> Maybe.map .time
+                |> Maybe.map (\x -> x + record.delay)
                 |> Maybe.withDefault record.startedAt
       }
     , { record
@@ -189,6 +193,7 @@ splitRecord idx record =
           , snapshots <- afterSnaps
       }
     )
+      
 
 
 -- PRETTY PRINT
@@ -196,4 +201,4 @@ splitRecord idx record =
 
 prettyPrint : JsElmValue -> String
 prettyPrint val =
-  Native.Debugger.RuntimeApi.prettyPrint val "  "
+  Native.Debugger.RuntimeApi.prettyPrint val
