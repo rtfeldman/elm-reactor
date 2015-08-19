@@ -17,7 +17,6 @@ import DataUtils exposing (..)
 
 type alias Model =
   { session : DM.DebugSession
-  , totalTimeLost : Time
   , runningState : RunningState
   , numFrames : Int
   , exprLogs : Dict DM.ExprTag DM.ValueLog
@@ -30,7 +29,6 @@ type alias Model =
 initModel : DM.DebugSession -> Model
 initModel session =
   { session = session
-  , totalTimeLost = 0
   , runningState = Playing []
   , numFrames = 1
   , exprLogs = Dict.empty

@@ -9,10 +9,11 @@ import Graphics.Collage
 import Html exposing (Html)
 import Text
 import Time exposing (Time)
-import Color
+import Color exposing (Color)
 import Dict exposing (Dict)
 
 import Effects exposing (..)
+import Easing
 
 import SimpleGraph exposing (..)
 import DataUtils exposing (..)
@@ -23,7 +24,7 @@ type alias Tag =
   DM.NodeId
 
 
-type Action
+type Message
   = Pulse (List DM.NodeId)
   | Tick Time
 
@@ -48,9 +49,9 @@ initState =
   }
 
 
-update : Action -> Model -> (Model, Effects Action)
-update msg state =
-  case msg of
+update : Message -> Model -> (Model, Effects Message)
+update action state =
+  case action of
     Pulse nodes ->
       case state.animationState of
         Nothing ->
@@ -94,20 +95,44 @@ update msg state =
           )
 
 
+normalColor =
+  Color.lightBlue
+
+
+activeColor =
+  Color.red
+
+
 view : Model -> DM.SGShape -> Html
 view model sgShape =
-  sgShape
-    |> .nodes
-    |> Dict.map (\nodeId nodeInfo -> (nodeInfo, nodeInfo.kids))
-    |> viewGraph
-    |> render
-    |> (\x -> [x])
-    |> Graphics.Collage.collage 300 400
-    |> Html.fromElement
+  let
+    pulseColor =
+      case model.animationState of
+        Nothing ->
+          normalColor
+
+        Just {elapsedTime} ->
+          Easing.ease
+            Easing.easeOutQuad
+            Easing.color
+            activeColor
+            normalColor
+            duration
+            elapsedTime
+
+  in
+    sgShape
+      |> .nodes
+      |> Dict.map (\nodeId nodeInfo -> (nodeInfo, nodeInfo.kids))
+      |> viewGraph pulseColor model.nodes
+      |> render
+      |> (\x -> [x])
+      |> Graphics.Collage.collage 300 400
+      |> Html.fromElement
 
 
-viewGraph : DiGraph DM.NodeId DM.NodeInfo -> Diagram Tag a
-viewGraph graph =
+viewGraph : Color -> List DM.NodeId -> DiGraph DM.NodeId DM.NodeInfo -> Diagram Tag a
+viewGraph pulseColor activeNodes graph =
   let
     pruned =
       prune graph
@@ -116,7 +141,7 @@ viewGraph graph =
       (heightLevels pruned)
         |> Dict.toList
         |> List.reverse
-        |> List.map (snd >> viewRow)
+        |> List.map (snd >> (viewRow pulseColor activeNodes))
         |> List.intersperse (vspace 20)
         |> vcat
 
@@ -146,18 +171,25 @@ viewGraph graph =
       |> alignCenter
 
 
-viewRow : List (DM.NodeId, DM.NodeInfo) -> Diagram Tag a
-viewRow row =
+viewRow : Color -> List DM.NodeId -> List (DM.NodeId, DM.NodeInfo) -> Diagram Tag a
+viewRow pulseColor activeNodes row =
   row
-    |> List.map (\(id, nodeInfo) -> viewNode id nodeInfo)
+    |> List.map (\(id, nodeInfo) -> viewNode pulseColor activeNodes id nodeInfo)
     |> List.intersperse (hspace 10)
     |> hcat
     |> alignCenter
 
 
-viewNode : DM.NodeId -> DM.NodeInfo -> Diagram Tag a
-viewNode id nodeInfo =
-  text nodeInfo.name Text.defaultStyle
-    |> Pad.pad 5
-    |> Pad.background (fillAndStroke (Solid Color.lightBlue) Graphics.Collage.defaultLine)
-    |> tag id
+viewNode : Color -> List DM.NodeId -> DM.NodeId -> DM.NodeInfo -> Diagram Tag a
+viewNode pulseColor activeNodes id nodeInfo =
+  let
+    bgColor =
+      if activeNodes |> List.member id then
+        pulseColor
+      else
+        normalColor
+  in
+    text nodeInfo.name Text.defaultStyle
+      |> Pad.pad 5
+      |> Pad.background (fillAndStroke (Solid bgColor) Graphics.Collage.defaultLine)
+      |> tag id

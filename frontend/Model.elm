@@ -57,21 +57,29 @@ initModel =
 
 
 type Message
+  -- controls
   = SidebarVisible Bool
   | PermitSwaps Bool
   | PlayPauseButtonAction (Button.Message Active.Command)
   | RestartButtonAction (Button.Message Active.Command)
+  -- errors
+  | CloseErrors
+  -- subcomponents
   | LogsMessage Logs.Message
+  | SignalGraphMessage SignalGraph.Message
+  -- socket
   | ConnectSocket (Maybe WebSocket.WebSocket)
+  -- import / export
   | ExportSession
   | ImportSession (List File.File)
   | SessionInputErrorMessage SessionInputError
+  -- swap
   | SwapEvent SwapEvent
+  -- interacting with the service
   | NewServiceState Service.Model
   | ServiceCommand Active.Command
-  -- vv `Nothing` here means resetting the mismatch error
   | CommandResponse Active.CommandResponseMessage
-  | CloseErrors
+  -- 
   | NoOp
 
 

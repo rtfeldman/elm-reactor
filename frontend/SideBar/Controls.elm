@@ -77,7 +77,7 @@ darkGrey = Color.rgb 74 74 74
 
 -- VIEW
 
-view : Signal.Address Model.Message -> Model.Model -> Active.Model -> Html
+--view : Signal.Address Model.Message -> Model.Model -> Active.Model -> Html
 view addr state activeState =
   let
     midWidth =

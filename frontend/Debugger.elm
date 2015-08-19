@@ -3,7 +3,7 @@ module Debugger where
 import Html exposing (..)
 import Html.Attributes as Attr exposing (..)
 import Html.Events exposing (..)
-import Html.Lazy exposing (lazy)
+import Html.Lazy
 import Signal
 import Task exposing (Task)
 import Json.Decode as JsDec
@@ -257,7 +257,7 @@ viewSidebar addr state =
               addr
               state
               activeState
-          , lazy2
+          , Html.Lazy.lazy2
               SignalGraph.view
                 state.signalGraphState
                 (API.getSgShape activeState.session)
@@ -335,12 +335,28 @@ update msg state =
 
             Nothing ->
               Logs.NoOp
+
+        (sgState, sgEffects) =
+          case serviceState of
+            Just active ->
+              case active.runningState of
+                Active.Playing justUpdated ->
+                  SignalGraph.update
+                    (SignalGraph.Pulse justUpdated)
+                    state.signalGraphState
+
+                Active.Paused _ _ ->
+                  (state.signalGraphState, none)
+
+            Nothing ->
+              (state.signalGraphState, none)
       in
         ( { state
               | serviceState <- serviceState
               , logsState <- fst (Logs.update logMsg state.logsState)
+              , signalGraphState <- sgState
           }
-        , none
+        , Effects.map SignalGraphMessage sgEffects
         )
 
     PlayPauseButtonAction buttonMsg ->
@@ -400,6 +416,16 @@ update msg state =
       in
         ( { state | logsState <- newLogsState }
         , sendEffect
+        )
+
+    SignalGraphMessage sgMessage ->
+      let
+        (sgState, sgEffects) =
+          SignalGraph.update sgMessage state.signalGraphState
+
+      in
+        ( { state | signalGraphState <- sgState }
+        , Effects.map SignalGraphMessage sgEffects
         )
 
     ConnectSocket maybeSocket ->
