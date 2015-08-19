@@ -309,6 +309,9 @@ update msg state =
                   newFrameNot.subscribedNodeValues
                     |> getMainVal state.session
 
+                updated =
+                  Debug.log "updated" newFrameNot.updatedNodes
+
                 currentFrameIndex =
                   state.numFrames
 

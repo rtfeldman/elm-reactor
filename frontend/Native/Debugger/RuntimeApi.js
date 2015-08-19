@@ -111,12 +111,23 @@ Elm.Native.Debugger.RuntimeApi.make = function(localRuntime) {
 						var node = session.sgNodes[nodeId];
 						return Utils.Tuple2(nodeId, node.value);
 					});
+
+					var updatedNodes = [];
+					for (var nodeId in session.sgNodes)
+					{
+						var node = session.sgNodes[nodeId];
+						if (node.updatedThisFrame)
+						{
+							updatedNodes.push(node.id);
+						}
+					}
 					// send notification
 					var notification = {
 						_: {},
 						event: event,
 						flaggedExprValues: List.fromArray(session.flaggedExprValues),
-						subscribedNodeValues: List.fromArray(subscribedNodeValues)
+						subscribedNodeValues: List.fromArray(subscribedNodeValues),
+						updatedNodes: List.fromArray(updatedNodes)
 					}
 					Task.perform(notificationAddress._0(notification));
 
