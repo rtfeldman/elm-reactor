@@ -9,8 +9,8 @@ import Debugger.Service as Service
 import Debugger.Active as Active
 import SideBar.Logs as Logs
 import Button
-import Debugger.RuntimeApi as API
 import Debugger.Model as DM
+import SignalGraph
 
 
 type alias Model =
@@ -22,6 +22,7 @@ type alias Model =
   , errorState : ErrorState
   , logsState : Logs.Model
   , swapSocket : Maybe WebSocket.WebSocket
+  , signalGraphState : SignalGraph.Model
   }
 
 
@@ -51,6 +52,7 @@ initModel =
   , errorState = NoErrors
   , logsState = Logs.initModel
   , swapSocket = Nothing
+  , signalGraphState = SignalGraph.initState
   }
 
 

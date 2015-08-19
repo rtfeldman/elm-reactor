@@ -8,8 +8,11 @@ import Diagrams.Query exposing (..)
 import Graphics.Collage
 import Html exposing (Html)
 import Text
+import Time exposing (Time)
 import Color
 import Dict exposing (Dict)
+
+import Effects exposing (..)
 
 import SimpleGraph exposing (..)
 import DataUtils exposing (..)
@@ -20,21 +23,87 @@ type alias Tag =
   DM.NodeId
 
 
-viewNode : DM.NodeId -> DM.NodeInfo -> Diagram Tag a
-viewNode id nodeInfo =
-  text nodeInfo.name Text.defaultStyle
-    |> Pad.pad 5
-    |> Pad.background (fillAndStroke (Solid Color.lightBlue) Graphics.Collage.defaultLine)
-    |> tag id
+type Action
+  = Pulse (List DM.NodeId)
+  | Tick Time
 
 
-viewRow : List (DM.NodeId, DM.NodeInfo) -> Diagram Tag a
-viewRow row =
-  row
-    |> List.map (\(id, nodeInfo) -> viewNode id nodeInfo)
-    |> List.intersperse (hspace 10)
-    |> hcat
-    |> alignCenter
+type alias Model =
+  { nodes : List DM.NodeId
+  , animationState : AnimationState
+  }
+
+
+duration = Time.second
+
+
+type alias AnimationState =
+  Maybe { prevClockTime : Time, elapsedTime : Time }
+
+
+initState : Model
+initState =
+  { animationState = Nothing
+  , nodes = []
+  }
+
+
+update : Action -> Model -> (Model, Effects Action)
+update msg state =
+  case msg of
+    Pulse nodes ->
+      case state.animationState of
+        Nothing ->
+          ( { state | nodes <- nodes }
+          , Effects.tick Tick
+          )
+
+        Just animState ->
+          ( { state
+                | animationState <- Just { animState | elapsedTime <- 0 }
+                , nodes <- nodes
+            }
+          , Effects.none
+          )
+
+    Tick clockTime ->
+      let
+        newElapsedTime =
+          case state.animationState of
+            Nothing ->
+              0
+
+            Just {elapsedTime, prevClockTime} ->
+              elapsedTime + (clockTime - prevClockTime)
+      in
+        if newElapsedTime > duration then
+          ( { state
+                | animationState <- Nothing
+            }
+          , Effects.none
+          )
+        else
+          ( { state
+                | animationState <-
+                    Just
+                      { elapsedTime = newElapsedTime
+                      , prevClockTime = clockTime
+                      }
+            }
+          , Effects.tick Tick
+          )
+
+
+view : Model -> DM.SGShape -> Html
+view model sgShape =
+  sgShape
+    |> .nodes
+    |> Dict.map (\nodeId nodeInfo -> (nodeInfo, nodeInfo.kids))
+    |> viewGraph
+    |> render
+    |> (\x -> [x])
+    |> Graphics.Collage.collage 300 400
+    |> Html.fromElement
 
 
 viewGraph : DiGraph DM.NodeId DM.NodeInfo -> Diagram Tag a
@@ -77,13 +146,18 @@ viewGraph graph =
       |> alignCenter
 
 
-view : DM.SGShape -> Html
-view sgShape =
-  sgShape
-    |> .nodes
-    |> Dict.map (\nodeId nodeInfo -> (nodeInfo, nodeInfo.kids))
-    |> viewGraph
-    |> render
-    |> (\x -> [x])
-    |> Graphics.Collage.collage 300 400
-    |> Html.fromElement
+viewRow : List (DM.NodeId, DM.NodeInfo) -> Diagram Tag a
+viewRow row =
+  row
+    |> List.map (\(id, nodeInfo) -> viewNode id nodeInfo)
+    |> List.intersperse (hspace 10)
+    |> hcat
+    |> alignCenter
+
+
+viewNode : DM.NodeId -> DM.NodeInfo -> Diagram Tag a
+viewNode id nodeInfo =
+  text nodeInfo.name Text.defaultStyle
+    |> Pad.pad 5
+    |> Pad.background (fillAndStroke (Solid Color.lightBlue) Graphics.Collage.defaultLine)
+    |> tag id

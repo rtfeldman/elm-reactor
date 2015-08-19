@@ -257,7 +257,10 @@ viewSidebar addr state =
               addr
               state
               activeState
-          , lazy SignalGraph.view (API.getSgShape activeState.session)
+          , lazy2
+              SignalGraph.view
+                state.signalGraphState
+                (API.getSgShape activeState.session)
           , exportImport addr
           ]
 

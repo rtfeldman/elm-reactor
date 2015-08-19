@@ -2,6 +2,7 @@ module Debugger.Active where
 
 import Dict exposing (Dict)
 import Set exposing (Set)
+import Array exposing (Array)
 import Debug
 import Task exposing (Task)
 import Time exposing (Time)
@@ -22,6 +23,7 @@ type alias Model =
   , exprLogs : Dict DM.ExprTag DM.ValueLog
   , nodeLogs : Dict DM.NodeId DM.ValueLog
   , subscribedNodes : Set DM.NodeId
+  , nodesUpdated : Array (List DM.NodeId)
   }
 
 
@@ -29,11 +31,12 @@ initModel : DM.DebugSession -> Model
 initModel session =
   { session = session
   , totalTimeLost = 0
-  , runningState = Playing
+  , runningState = Playing []
   , numFrames = 1
   , exprLogs = Dict.empty
   , nodeLogs = Dict.empty
   , subscribedNodes = Set.empty
+  , nodesUpdated = Array.empty
   }
 
 
@@ -44,7 +47,7 @@ type SwapState
 
 
 type RunningState
-  = Playing
+  = Playing (List DM.NodeId)
   | Paused DM.FrameIndex DM.ImmediateSessionRecord
 
 
@@ -101,12 +104,12 @@ update msg state =
         Play ->
           case state.runningState of
             Paused pausedIdx record ->
-              ( { state | runningState <- Playing }
+              ( { state | runningState <- Playing [] }
               , playFrom state.session record pausedIdx
                   |> task
               )
 
-            Playing ->
+            Playing _ ->
               Debug.crash "already playing"
 
         Pause ->
@@ -122,7 +125,7 @@ update msg state =
           let
             pauseAndGetState =
               (case state.runningState of
-                Playing ->
+                Playing _ ->
                   API.pause state.session
                     |> Task.mapError (\_ -> Debug.crash "already in that state")
 
@@ -148,7 +151,7 @@ update msg state =
           let
             getRecord =
               case state.runningState of
-                Playing ->
+                Playing _ ->
                   (API.pause state.session
                     |> Task.mapError (\_ -> Debug.crash "already paused"))
 
@@ -158,7 +161,7 @@ update msg state =
                     |> fst
                     |> Task.succeed
           in
-            ( { state | runningState <- Playing }
+            ( { state | runningState <- Playing [] }
             , getRecord
               `Task.andThen` (\record ->
                 playFrom state.session record 0)
@@ -169,7 +172,7 @@ update msg state =
           let
             getRecord =
               case state.runningState of
-                Playing ->
+                Playing _ ->
                   API.pause state.session
                     |> Task.mapError (\_ -> Debug.crash "already paused")
 
@@ -201,8 +204,8 @@ update msg state =
 
                         Ok (newSession, exprLogs, nodeLogs) ->
                           (case state.runningState of
-                            Playing ->
-                              Task.succeed Playing
+                            Playing _ ->
+                              Task.succeed (Playing [])
 
                             Paused idx _ ->
                               (API.pause newSession
@@ -289,7 +292,7 @@ update msg state =
                   )
                 )
           in
-            ( { state | runningState <- Playing }
+            ( { state | runningState <- Playing [] }
             , initTask |> task
             )
 
@@ -300,7 +303,7 @@ update msg state =
             Paused _ _ ->
               Debug.crash "new frame while paused"
 
-            Playing ->
+            Playing _ ->
               let
                 newMainVal =
                   newFrameNot.subscribedNodeValues
@@ -330,6 +333,7 @@ update msg state =
                       | numFrames <- state.numFrames + 1
                       , exprLogs <- newExprLogs
                       , nodeLogs <- newNodeLogs
+                      , runningState <- Playing newFrameNot.updatedNodes
                   }
                 , none
                 )
@@ -493,7 +497,7 @@ truncateLog frameIdx log =
 isPlaying : Model -> Bool
 isPlaying model =
   case model.runningState of
-    Playing ->
+    Playing _ ->
       True
 
     _ ->

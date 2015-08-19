@@ -1,4 +1,4 @@
-module Pulse where
+module Pulsable where
 
 import Easing
 import Effects exposing (Effects, Never)
@@ -12,36 +12,12 @@ import Color
 import Task
 
 
-app =
-  StartApp.start
-    { init = init
-    , update = update
-    , view = view
-    , inputs = []
-    }
-
-
-main =
-  app.html
-
-
-port tasks : Signal (Task.Task Never ())
-port tasks =
-  app.tasks
-
-
-
-
-
--- MODEL
-
 type alias Model =
-    { animationState : AnimationState
-    } -- 1 => 0
+    { animationState : AnimationState }
 
 
 type alias AnimationState =
-    Maybe { prevClockTime : Time,  elapsedTime : Time }
+    Maybe { prevClockTime : Time, elapsedTime : Time }
 
 
 init : (Model, Effects Action)
@@ -57,14 +33,14 @@ duration = second
 -- UPDATE
 
 type Action
-    = Pulse
+    = Pulse (List DM.NodeId)
     | Tick Time
 
 
 update : Action -> Model -> (Model, Effects Action)
 update msg model =
   case msg of
-    Pulse ->
+    Pulse nodes ->
       case model.animationState of
         Nothing ->
           ( model, Effects.tick Tick )
@@ -110,9 +86,9 @@ view address model =
         Just {elapsedTime} ->
           Easing.ease
             Easing.easeOutQuad
-            Easing.color
-            Color.red
-            Color.white
+            Easing.float
+            1
+            0
             duration
             elapsedTime
   in
@@ -121,5 +97,3 @@ view address model =
       , onClick address Pulse
       ]
       [ text "SUPPPP" ]
-
-
